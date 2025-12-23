@@ -1,47 +1,45 @@
-const express = require('express');
-const admin = require('firebase-admin');
-const cors = require('cors');
-
+const admin = require("firebase-admin");
+const express = require("express");
 const app = express();
 app.use(express.json());
-app.use(cors());
 
-// Simple credentials check
-if (!process.env.FIREBASE_PRIVATE_KEY) {
-  console.error("ERROR: FIREBASE_PRIVATE_KEY missing in Environment Variables!");
-}
-
-const serviceAccount = {
-  "project_id": process.env.FIREBASE_PROJECT_ID,
-  "private_key": process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : "",
-  "client_email": process.env.FIREBASE_CLIENT_EMAIL
+// --- YE LOGIC KEY KE HAR ERROR KO KHATAM KAR DEGA ---
+const getFormattedKey = (key) => {
+  if (!key) return undefined;
+  // 1. Double quotes hatayega
+  let k = key.replace(/^"|"$/g, '');
+  // 2. Escaped newlines (\\n) ko asli lines me badlega
+  k = k.replace(/\\n/g, '\n');
+  // 3. Agar koi extra space ya galat character hai toh use clean karega
+  if (!k.includes("-----BEGIN PRIVATE KEY-----")) {
+    k = `-----BEGIN PRIVATE KEY-----\n${k}\n-----END PRIVATE KEY-----`;
+  }
+  return k;
 };
+
+const privateKey = getFormattedKey(process.env.FIREBASE_PRIVATE_KEY);
 
 try {
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: privateKey,
+    }),
   });
-  console.log("Firebase Admin Initialized ✅");
-} catch (e) {
-  console.error("Initialization Error:", e.message);
+  console.log("✅ SYSTEM READY: Firebase Connected!");
+} catch (error) {
+  console.log("❌ PEM ERROR FIX NEEDED:", error.message);
 }
 
-app.get('/', (req, res) => res.send('Server is Up!'));
-
-app.post('/send-push', async (req, res) => {
+app.post("/send-push", async (req, res) => {
   const { toToken, title, body } = req.body;
-  const message = {
-    notification: { title, body },
-    token: toToken
-  };
   try {
-    await admin.messaging().send(message);
+    await admin.messaging().send({ notification: { title, body }, token: toToken });
     res.status(200).send({ success: true });
-  } catch (error) {
-    res.status(500).send({ error: error.message });
-  }
+  } catch (e) { res.status(500).send({ error: e.message }); }
 });
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Server live on port ${PORT}`));
+app.get("/", (req, res) => res.send("Server is Active"));
+app.listen(process.env.PORT || 10000);
 
